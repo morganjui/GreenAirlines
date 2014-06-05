@@ -1,0 +1,445 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<html>
+<head>
+<title>Which Airline is greener?</title>
+    <link rel="stylesheet" type="text/css" href="A2style.css">
+</head>
+<body style="position: relative; min-height: 100%; top:0px; font-size: 100%">
+
+<div id="topBanner">
+  <h1 class="center">Which Airline is Greener?</h1>
+  <div id="legend-anchor"></div>
+  <div id="legend" class="center">
+    <div style = "background:white ;height:20px"></div>
+  </div>
+</div>
+<p/>
+<div id="matrix" class="center"></div>
+
+<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+<script src="http://d3js.org/queue.v1.min.js"></script>
+<script src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
+<script>
+var airlines = ["AirTran", "Alaska Airlines", "American Airlines", "American Eagle Airlines", "Delta Air Lines", "Frontier Airlines", "Hawaiian Airlines", "JetBlue Airways", "SkyWest Airlines", "Southwest Airlines", "Spirit Air Lines", "US Airways", "United Air Lines", "Virgin America"];
+
+var columns = ["Year", "Month", "Domestic_Fuel_in_thousand_gallon", "Domestic_Passenger", "Domestic_Ratio_in_gallon_per_passenger", "International_Fuel_in_thousand_gallon", "International_Passenger", "International_Ratio_in_gallon_per_passenger"];
+
+var colors = ["hsl(201, 75%, 55%)", 
+              "hsl(184, 67%, 51%)", 
+              "hsl(167, 64%, 48%)", 
+              "hsl(150, 66%, 45%)", 
+              "hsl(132, 66%, 43%)",
+              "hsl(115, 67%, 40%)",
+              "hsl(98, 68%, 37%)",
+              "hsl(80, 69%, 34%)",
+              "hsl(63, 70%, 32%)",
+              "hsl(46, 70%, 29%)"];
+
+var matrixData = [];
+var hiddenData = [];
+var airlines_nospace = [];
+
+var q = queue(); // read data from multiple csv files
+airlines.forEach(function(d){
+  var url = "airlines/" + d + ".csv";
+  if(UrlExists(url)){
+    q.defer(function(callback){
+      d3.csv(url, function(res){ 
+        matrixData.push({name:d, data:res}); 
+        callback(null, res);
+      });
+    });
+  }
+});
+
+q.await(ready);
+
+function ready(err, results) {
+  console.log(matrixData);
+  drawMatrix();
+}
+
+
+var boxWidth=228, boxHeight=285, titleHeight=45, lineGaps = 15, plotWidth = 19, plotHeight=19, leftPadding = 10, upPadding = 10, boxGap = 1, leftMargin = 35, rulerLength = 7;
+
+function drawMatrix(){
+  var canvasWidth=960, canvasHeight=1200;
+  var titleFontSize = 18;
+
+  // initial the matrix canvas
+  var svg = d3.select("#matrix")
+              .append("svg")
+              .attr("width", canvasWidth)
+              .attr("height", canvasHeight);
+  
+  // creat rectangle boxes for each airline
+  var boxes = svg.selectAll("g")
+    .data(matrixData)
+    .enter()
+    .append("g")
+    .attr("id", function(d){ 
+      airlines_nospace.push(d.name.replace(/\s+/g, '')); //assign airline names with no space to IDs
+      return airlines_nospace[airlines_nospace.length-1];
+    });
+
+  // creat groups for title bar area
+  var titleBars = boxes.data(matrixData).append("g")
+    .on("mouseover", function(d, i){
+    svg.select("#ruler").remove();
+    drawRuler(Math.floor(i/4), i%4);
+    d3.select(this).select("image").attr("visibility", "visible");
+  })
+  .on("mouseout", function(d, i){
+    d3.select(this).select("image").attr("visibility", "hidden");
+  });
+
+  // draw the title bar for each airline
+  titleBars.data(matrixData)
+  .append("rect")
+  .attr("x", function(d,i){ return (i % 4) * (boxWidth + boxGap) + leftMargin;})
+  .attr("y", function(d,i){ return Math.floor(i / 4) * (boxHeight + lineGaps);})
+  .attr("width", boxWidth)
+  .attr("height", titleHeight)
+  .attr("fill", "#CCCCCC")
+  .attr("stroke", "white");
+
+  // draw the title for each airline
+  titleBars.data(matrixData)
+  .append("text")
+  .text(function(d){ return d.name;})
+  .attr("x", function(d,i){ return (i % 4) * (boxWidth + boxGap) + leftMargin + leftPadding;})
+  .attr("y", function(d,i){ return Math.floor(i / 4) * (boxHeight + lineGaps) + upPadding + titleFontSize;})
+  .attr("style", "fill:#666666; font-size:" + titleFontSize + "; font-family:Helvetica");
+
+  // draw the X image for each airline
+  var crossWidth = 22, crossHeight = 22, crossRelativeX = boxWidth - crossWidth - leftPadding;
+  titleBars.data(matrixData)
+  .append("image")
+  .attr("x", function(d, i){ return (i % 4) * (boxWidth + boxGap) + leftMargin + crossRelativeX;})
+  .attr("y", function(d, i){ return Math.floor(i / 4) * (boxHeight + lineGaps) + upPadding;})
+  .attr("width", crossWidth)
+  .attr("height", crossHeight)
+  .attr("xlink:href", "images/cross.png")
+  .attr("visibility", "hidden")
+  .on("mouseover", function(d){
+    d3.select(this).attr("xlink:href", "images/cross_hover.png");
+  })
+  .on("mouseout", function(){
+    d3.select(this).attr("xlink:href", "images/cross.png");
+  })
+  .on("click", function(d){
+    // d3.select(this.parentNode.parentNode).remove();
+    var index = airlines_nospace.indexOf(d3.select(this.parentNode.parentNode).attr("id"));
+    if (index > -1){
+      hiddenData.push(matrixData[index]);
+      matrixData.splice(index, 1);
+      airlines.splice(index, 1);
+      airlines_nospace = [];
+      d3.selectAll("svg").remove();
+      drawMatrix();
+    }
+  });
+
+  // get the boundry values
+  values = calMaxMin();
+
+  // build color coding map
+  var range = (values.domesticMax - values.domesticMin)/10;
+  // range = Math.ceil(range);
+  var colorMap = [Math.floor(values.domesticMin)];
+  for (i=1; i < colors.length; i++){
+    colorMap.push(Math.floor(values.domesticMin + range * i));
+  }
+  colorMap.push(Math.ceil(values.domesticMax));
+  drawLegend(colorMap);
+
+
+  // draw the color plots
+  matrixData.forEach(function(d, i){
+    svg.select("#" + d.name.replace(/\s+/g, ''))
+    .append("g")
+    .selectAll("rect")
+    .data(d.data)
+    .enter()
+    .append("rect")
+    .attr("x", function(d){ return (d.Month - 1) * plotWidth + (i % 4) * (boxWidth + boxGap) + leftMargin;}) //depends on months
+    .attr("y", function(d){ return (values.latestYear - d.Year) * plotHeight + Math.floor(i / 4) * (boxHeight + lineGaps) + titleHeight;}) //depends on years
+    .attr("width", plotWidth)
+    .attr("height", plotHeight)
+    .attr("stroke", "white")
+    .attr("fill", function(d){ // mapping colors
+      for(i = 1; i<colorMap.length; i++){
+        if(d.Domestic_Ratio_in_gallon_per_passenger < colorMap[i]){
+          return colors[i-1];
+        }
+      }
+    })
+    .attr("visibility", function(d){
+      return (d.Domestic_Ratio_in_gallon_per_passenger <= 0) ? "hidden" : "visible";
+    })
+    .on("mouseover", function(d){
+      svg.select("#ruler").remove();
+      index = airlines_nospace.indexOf(d3.select(this.parentNode.parentNode).attr("id"));
+      drawRuler(Math.floor(index/4), index%4, d.Year, d.Month);
+    })
+    .on("mouseout", function(){
+      svg.select("#ruler").remove();
+      svg.selectAll("#detailBox").remove();
+      drawRuler(Math.floor(index/4), index%4);
+    })
+    .on("mousedown", function(d){ // show the detail info for a specific plot
+      d3.event.preventDefault();
+      svg.selectAll("#detailBox").remove();
+      var detailBoxWidth = 180, detailBoxHeight = 65, detailTriangleHeight = 10, detailTopPadding = 20, detailLeftPadding = 10, detailFontSize = 12;
+      var detailHighlightColor = "#92C5ED";
+      var mouse = d3.mouse(this);
+      
+      var detailBox = svg.append("g")
+      .attr("id", "detailBox");
+
+      detailBox.append("polygon")
+      .attr("points", mouse[0] + "," + mouse[1] + " " +
+                      (mouse[0] + detailTriangleHeight / 2) + "," + (mouse[1] - detailTriangleHeight) + " " +
+                      (mouse[0] - detailTriangleHeight / 2) + "," + (mouse[1] - detailTriangleHeight))
+      .attr("fill", "#333333");
+
+      detailBox.append("rect")
+      .attr("x", (d3.mouse(this)[0] - 20 + detailBoxWidth > canvasWidth) ? (d3.mouse(this)[0] - detailBoxWidth + 20) : (d3.mouse(this)[0] - 20))
+      .attr("y", d3.mouse(this)[1] - detailBoxHeight - detailTriangleHeight)
+      .attr("rx", 10)
+      .attr("ry", 10)
+      .attr("width", detailBoxWidth)
+      .attr("height", detailBoxHeight)
+      .attr("fill", "#333333");
+
+      detailText = detailBox.append("text")
+      .text("No. of passenger: ")
+      .attr("x", (d3.mouse(this)[0] - 20 + detailBoxWidth > canvasWidth) ? (d3.mouse(this)[0] - detailBoxWidth + 20 + detailLeftPadding) : (d3.mouse(this)[0] - 20 + detailLeftPadding))
+      .attr("y", d3.mouse(this)[1] - detailBoxHeight - detailTriangleHeight + detailTopPadding)
+      .attr("style", "fill:#E6E6E6; font-size:" + detailFontSize + "; font-family:Helvetica");
+
+      detailText.append("tspan")
+      .text(d.Domestic_Passenger.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
+      .attr("fill", detailHighlightColor);
+
+      detailText.append("tspan")
+      .text("Consumed Fuel: ")
+      .attr("x", (d3.mouse(this)[0] - 20 + detailBoxWidth > canvasWidth) ? (d3.mouse(this)[0] - detailBoxWidth + 20 + detailLeftPadding) : (d3.mouse(this)[0] - 20 + detailLeftPadding))
+      .attr("dy", detailFontSize + 3);
+
+      detailText.append("tspan")
+      .text((d.Domestic_Fuel_in_thousand_gallon * 1000).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","))
+      .attr("fill", detailHighlightColor);
+
+      detailText.append("tspan")
+      .text("Ratio (gallon/person): ")
+      .attr("x", (d3.mouse(this)[0] - 20 + detailBoxWidth > canvasWidth) ? (d3.mouse(this)[0] - detailBoxWidth + 20 + detailLeftPadding) : (d3.mouse(this)[0] - 20 + detailLeftPadding))
+      .attr("dy", detailFontSize + 3);
+
+      detailText.append("tspan")
+      .text(d.Domestic_Ratio_in_gallon_per_passenger)
+      .attr("fill", detailHighlightColor);
+    })
+    .on("mouseup", function(){
+      svg.selectAll("#detailBox").remove();
+    });
+  });
+
+  drawRuler(0, 0);
+}
+
+function drawLegend(colorMap){
+  var h=100, legendMargin = 5, legendLength = 40;
+  var svg = d3.select("#legend")
+    .insert("svg", ":first-child")
+    .attr("height", h)
+    .attr("id", "legendSVG");
+
+  svg.selectAll("g")
+    .data(colors)
+    .enter()
+    .append("rect")
+    .attr("x", function(d, i){return 65 + i * legendLength;})
+    .attr("y", 25)
+    .attr("width", legendLength)
+    .attr("height", legendLength)
+    .attr("stroke", "white")
+    .attr("stroke-width", 1)
+    .attr("fill", function(d){return d;});
+
+  svg.append("text")
+    .text("efficient")
+    .attr("x", 0)
+    .attr("y", 50)
+    .attr("style", function(d){return "font-size:1em; fill:" + colors[0];});  
+
+  svg.append("text")
+    .text("inefficient")
+    .attr("x", 65 + legendMargin + 10 * legendLength)
+    .attr("y", 50)
+    .attr("style", function(d){return "font-size:1em; fill:" + colors[9];});
+
+  colorMap.forEach(function(d, i){
+    svg.append("text")
+    .text(function(){ return (d < 10) ? "\n" + d : d;})
+    .attr("x", function(){ return 55 + legendLength * i;})
+    .attr("y", 20)
+    .attr("style", function(d){return "font-size:0.8em; fill:#333333";})
+    .attr("xml:space", "preserve");
+  });
+
+  svg.append("text")
+    .text("(Consumed fuel in gallon per Passenger)")
+    .attr("x", 115)
+    .attr("y", 85)
+    .attr("style", function(d){return "font-size:1em; fill:#333333";});
+}
+
+function drawRuler(row, column, highlightY, highlightM){
+  var highlightColor = "#ED1C24";
+  var indexFontSize = 12;
+
+  // draw the lines of indexes 
+  ruler = d3.select("#matrix").select("svg").append("g").attr("id", "ruler") // create a new group
+  
+  ruler.append("line") // y-axis
+  .attr("x1", leftMargin)
+  .attr("y1", titleHeight + (boxHeight + lineGaps) * row)
+  .attr("x2", leftMargin)
+  .attr("y2", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - values.earliestYear + 1))
+  .attr("stroke", "#B3B3B3");
+  
+  ruler.append("line") // x-axis
+  .attr("x1", leftMargin)
+  .attr("y1", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - values.earliestYear + 1))
+  .attr("x2", function(){
+    if (row == Math.floor(airlines_nospace.length/4)){
+      return leftMargin + (airlines_nospace.length % 4) * 12 * plotWidth;
+    }
+    return leftMargin + 4 * 12 * plotWidth;
+  })
+  .attr("y2", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - values.earliestYear + 1))
+  .attr("stroke", "#B3B3B3");
+  
+  for (i=1; i < values.latestYear - values.earliestYear + 1; i++){//y-dashes
+    ruler.append("line")
+    .attr("x1", leftMargin - rulerLength)
+    .attr("y1", titleHeight + (boxHeight + lineGaps) * row + plotHeight * i)
+    .attr("x2", leftMargin)
+    .attr("y2", titleHeight + (boxHeight + lineGaps) * row + plotHeight * i)
+    .attr("stroke", "#B3B3B3");
+  }
+  
+  for (i = 1; i < 12; i++){//x-dashes
+    ruler.append("line")
+    .attr("x1", leftMargin + (boxWidth + boxGap) * column + plotWidth * i)
+    .attr("y1", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - values.earliestYear + 1))
+    .attr("x2", leftMargin + (boxWidth + boxGap) * column + plotWidth * i)
+    .attr("y2", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - values.earliestYear + 1) + rulerLength)
+    .attr("stroke", "#B3B3B3");
+  }
+
+  // draw the indexes (years and months)
+  var yearIndex = [];
+  for (i = values.earliestYear; i < values.latestYear; i+=2){
+    yearIndex.push(i);
+  }
+  yearIndex.forEach(function(d, i){// years
+    ruler.append("text")
+    .text(d)
+    .attr("x", leftMargin - d.toString().length * indexFontSize/4*3)
+    .attr("y", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - d) + indexFontSize+2)
+    .attr("style", function(){
+      c = (d == highlightY) ? highlightColor : "#B3B3B3";
+      return "fill:" + c + "; font-size:" + indexFontSize + "; font-family:Helvetica";});
+  });
+  if (highlightY != null && yearIndex.indexOf(highlightY) == -1){
+    ruler.append("text")
+    .text(highlightY)
+    .attr("x", leftMargin - highlightY.toString().length * indexFontSize/4*3)
+    .attr("y", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - highlightY) + indexFontSize+2)
+    .attr("style", "fill:" + highlightColor + "; font-size:" + indexFontSize + "; font-family:Helvetica");
+  }
+
+  for (i = 1; i <= 12; i++){// months
+    ruler.append("text")
+    .text(function(){ return i < 10 ?  "0"+i : i;})
+    .attr("x", leftMargin + (boxWidth + boxGap) * column + plotWidth * (i-1) + indexFontSize / 4)
+    .attr("y", titleHeight + (boxHeight + lineGaps) * row + plotHeight * (values.latestYear - values.earliestYear + 1) + indexFontSize)
+    .attr("style", function(){
+      c = (i == highlightM) ? highlightColor : "#B3B3B3";
+      return "fill:" + c + "; font-size:" + indexFontSize + "; font-family:Helvetica";});
+  }
+}
+
+function calMaxMin(){
+  var latestYear = -Number.MAX_VALUE, earliestYear = Number.MAX_VALUE;
+  var domesticMax = -Number.MAX_VALUE, domesticMin = Number.MAX_VALUE;
+
+  matrixData.forEach(function(d){
+    d.data.forEach(function(e){
+      //change numbers from string to digits
+      e.Year = +e.Year;
+      e.Month = +e.Month;
+      e.Domestic_Passenger = +e.Domestic_Passenger;
+      e.Domestic_Fuel_in_thousand_gallon = +e.Domestic_Fuel_in_thousand_gallon;
+      e.Domestic_Ratio_in_gallon_per_passenger = +e.Domestic_Ratio_in_gallon_per_passenger;
+      e.International_Passenger = +e.International_Passenger;
+      e.International_Fuel_in_thousand_gallon = +e.International_Fuel_in_thousand_gallon;
+      e.International_Ratio_in_gallon_per_passenger = +e.International_Ratio_in_gallon_per_passenger;
+      
+      //find the boundry of year range
+      if(e.Year < earliestYear){
+        earliestYear = e.Year;
+      }
+      if(e.Year > latestYear){
+        latestYear = e.Year;
+      }
+
+      //find the boundry of domestic ratio range for color coding
+      if(e.Domestic_Ratio_in_gallon_per_passenger != 0){
+        if(e.Domestic_Ratio_in_gallon_per_passenger < domesticMin){
+          domesticMin = e.Domestic_Ratio_in_gallon_per_passenger;
+        }
+        if(e.Domestic_Ratio_in_gallon_per_passenger > domesticMax){
+          domesticMax = e.Domestic_Ratio_in_gallon_per_passenger;
+        }
+      }
+    });
+  });
+
+  return {earliestYear:earliestYear, 
+            latestYear:latestYear, 
+            domesticMin:domesticMin, 
+            domesticMax:domesticMax};
+}
+
+// check if the url is existed
+function UrlExists(url){
+    var http = new XMLHttpRequest();
+    http.open('HEAD', url, false);
+    http.send();
+    return http.status!=404;
+}
+
+// stick the legend when scroll down
+$(function () {
+    $(window).scroll(sticky_relocate);
+    sticky_relocate();
+});
+
+function sticky_relocate() {
+    var window_top = $(window).scrollTop();
+    var div_top = $('#legend-anchor').offset().top;
+    if (window_top > div_top) {
+        $('#legend').addClass('stick');
+    } else {
+        $('#legend').removeClass('stick');
+    }
+}
+
+
+
+</script>
+</body>
+</html>

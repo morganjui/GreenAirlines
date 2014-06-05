@@ -1,0 +1,51 @@
+body {
+    padding: 0;
+    margin: 0;
+}
+
+#topBanner, #legend{
+    width: 100%;
+    top:0;
+    left:0;
+    margin: 0;
+    padding:20px 0px 0px;
+    background-color: #92C5ED; 
+}
+
+h1{
+    font-family:"Orator Std", Verdana, Sans-serif;
+    font-size:3em;
+}
+
+h2{
+    font-family: Helvetica, Sans-serif;
+    font-size: 1.5em;
+    color: #666666;
+}
+
+#legend{
+    padding:0;
+}
+
+#legend.stick{
+    position:fixed;
+    top: 0;
+    left:0;
+    right:0;
+    z-index: 10000;
+}
+
+#legendSVG{
+    margin:0 auto;
+    width: 550px;
+    display:block;
+}
+
+.center{
+    margin:0 auto;
+    width:960px;
+}
+
+.hidden{
+    display: none;
+}
